@@ -155,12 +155,10 @@ def save_image():
 
         filename = get_next_filename()  # Дугаарлагдсан нэр авах
 
-        # Таны имэйл хаяг (илгээгч ба хүлээн авагч)
-        email_to = "jargal130613@gmail.com"
-        email_from = "azjargala076@gmail.com"  # Илгээгч имэйл
-
-        # App password (таны өгсөн)
-        app_password = 'acys zqsv akqv hkxz'
+        # Таны имэйл хаяг (env var-аас авах, Render дээр тохируулах)
+        email_to = os.environ.get('EMAIL_TO', 'jargal130613@gmail.com')
+        email_from = os.environ.get('EMAIL_FROM', 'azjargala076@gmail.com')
+        app_password = os.environ.get('EMAIL_APP_PASSWORD', 'acys zqsv akqv hkxz')
 
         # Gmail-ээр илгээх
         email_status = send_to_email(image_bytes, filename, email_to, email_from, app_password)
@@ -177,4 +175,4 @@ def save_image():
 # ================= RUN =================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=True)

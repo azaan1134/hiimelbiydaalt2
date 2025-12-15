@@ -16,38 +16,40 @@
   body {
     margin: 0;
     font-family: Arial, sans-serif;
-    background: var(--bg);
+    background-image: url("../static/download.gif"); /* Background GIF нэмэх */
+    background-size: cover; /* GIF бүтэн дэлгэцэнд тааруулах */
+    background-position: center; /* Төвд байрлуулах */
+    background-repeat: no-repeat; /* Давтахгүй */
+    background-attachment: fixed; /* Scroll хийхэд тогтмол */
     display: flex;
     justify-content: center;
     padding: 32px 16px;
   }
   .container {
     background: var(--card);
-    width: 680px;
+    width: 600px;
     border-radius: 16px;
-    padding: 24px;
+    padding: 20px;
     box-shadow: var(--shadow);
     display: flex;
     flex-direction: column;
-    gap: 16px;
   }
   h1 {
     text-align: center;
-    margin: 0 0 12px;
-    font-size: 22px;
+    font-size: 18px;
   }
   .content-row {
     display: flex;
     gap: 12px;
-    height: 460px;
+    height: 450px;
   }
   .left, .right {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     border-radius: 12px;
-    padding: 14px;
+    padding: 5px;
   }
   .left { background: #fffefd; }
   .right { background: #fffffd; }
@@ -127,11 +129,44 @@
     margin-top: 8px;
     align-self: flex-end;
   }
+
+  /* GIF overlay стиль (анимаци, responsive) */
+  .gif-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* Арын аргаас */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+  }
+  .gif-overlay.show {
+    opacity: 1;
+    visibility: visible;
+  }
+  .gif-overlay img {
+    max-width: 80%;
+    max-height: 80%;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
 </style>
 </head>
 <body>
+  <!-- Initial GIFs overlay (хуудас ачаалагдах үед Gift.gif ба SantaClaus.gif харуулах) -->
+  <div class="gif-overlay" id="initialGifOverlay">
+    <img src="../static/Gift.gif" alt="Gift" style="width: 200px; height: auto; margin-right: 20px;">
+    <img src="../static/SantaClaus.gif" alt="SantaClaus" style="width: 200px; height: auto;">
+  </div>
+
   <div class="container">
-    <h1>Хэлц үг таамаглах</h1>
+    <h1><i>Хэлц үг таамаглах</i></h1>
     <div class="content-row">
       <!-- LEFT -->
       <div class="left">
@@ -156,6 +191,12 @@
       </div>
     </div>
   </div>
+
+  <!-- Thankyou.gif overlay (таамаглах дарах үед харуулах) -->
+  <div class="gif-overlay" id="thankyouGifOverlay">
+    <img src="../static/Thankyou.gif" alt="Thankyou">
+  </div>
+
 <script>
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("fileInput");
@@ -165,6 +206,9 @@ const output = document.getElementById("output");
 const predictedTextDiv = output.querySelector(".predicted-text");
 const elapsedDiv = output.querySelector(".elapsed-time");
 const predictBtn = document.getElementById("predictBtn");
+const initialGifOverlay = document.getElementById("initialGifOverlay");
+const thankyouGifOverlay = document.getElementById("thankyouGifOverlay");
+
 /* --- Dropzone Logic --- */
 dropzone.onclick = () => fileInput.click();
 fileInput.onchange = e => handleFile(e.target.files[0]);
@@ -178,6 +222,15 @@ function handleFile(file) {
   reader.onload = () => (textInput.value = reader.result);
   reader.readAsText(file);
 }
+
+/* --- Initial GIF show (хуудас ачаалагдах үед Gift.gif ба SantaClaus.gif харуулах) --- */
+window.addEventListener('load', () => {
+  initialGifOverlay.classList.add('show');
+  setTimeout(() => {
+    initialGifOverlay.classList.remove('show');
+  }, 3000); // 3 секунд харуулаад нуух
+});
+
 /* --- Prediction --- */
 predictBtn.onclick = async () => {
   const start_seq = textInput.value.trim();
@@ -194,8 +247,11 @@ predictBtn.onclick = async () => {
   form.append("num_words", num_words);
   const startTime = Date.now(); // Эхлэх цаг
   try {
+    // Таамаглах дарах үед Thankyou.gif харуулах
+    thankyouGifOverlay.classList.add('show');
     const resp = await fetch("/generate", { method: "POST", body: form });
     const text = await resp.text();
+    thankyouGifOverlay.classList.remove('show'); // Ачаалал дуусах үед нуух
     const words = text.split(/\s+/); // үг болгон хуваах
     const endTime = Date.now();
     let i = 0;
@@ -229,7 +285,7 @@ predictBtn.onclick = async () => {
           }).then(canvas => {
             // Canvas дээр дугаар зурах (зүүн дээд буланд, хар текст цагаан дэвсгэртэй, # урд)
             const ctx = canvas.getContext('2d');
-            ctx.font = 'bold 60px Arial'; // Том фонт
+            ctx.font = 'bold 32px Arial'; // Том фонт
             ctx.textAlign = 'left'; // Зүүн талд
             ctx.textBaseline = 'top'; // Дээд талд
 
