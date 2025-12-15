@@ -13,13 +13,12 @@ from email import encoders
 MODEL_FILE = "language_model.h5"
 META_FILE = "tokenizer_meta.json"
 SAVE_DIR = "saved_images"
-COUNTER_FILE = "screenshot_counter.txt"  # Дугаарлалтын тоолуур файл
+COUNTER_FILE = "screenshot_counter.txt"
 
 # ================= FLASK ТОХИРГОО =================
 app = Flask(__name__)
-app.secret_key = "replace-this-with-a-secret"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
-# Screenshot хадгалах хавтас (одоо ашиглахгүй, зөвхөн нэр үүсгэхэд)
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 # ================= ЗАГВАР АЧААЛАХ =================
@@ -54,7 +53,6 @@ def generate_text(start_seq, num_words=10):
 
     for _ in range(num_words):
         cur = generated[-seq_length:]
-
         if len(cur) < seq_length:
             cur = ["<PAD>"] * (seq_length - len(cur)) + cur
 
@@ -65,53 +63,56 @@ def generate_text(start_seq, num_words=10):
 
         x = np.array([indices])
         pred = model.predict(x, verbose=0)[0]
-
         next_idx = int(np.argmax(pred))
         generated.append(index_to_word[next_idx])
 
     return " ".join(generated)
 
-# ================= IMAGE FILE NAME (тогтвортой дугаарлалт) =================
+# ================= FILE NAME COUNTER =================
 def get_next_filename():
     if os.path.exists(COUNTER_FILE):
-        with open(COUNTER_FILE, 'r') as f:
+        with open(COUNTER_FILE, "r") as f:
             current_id = int(f.read().strip())
     else:
         current_id = 0
 
     next_id = current_id + 1
-    with open(COUNTER_FILE, 'w') as f:
+    with open(COUNTER_FILE, "w") as f:
         f.write(str(next_id))
 
     return f"user_{next_id}.png"
 
-# ================= SMTP ГМАИЛ ФУНКЦ =================
-def send_to_email(image_bytes, filename, email_to, email_from, app_password):
-    try:
-        # Имэйл бүтээх
-        message = MIMEMultipart()
-        message['From'] = email_from
-        message['To'] = email_to
-        message['Subject'] = f"Таамаглалын зураг: {filename}"
+# ================= EMAIL ИЛГЭЭХ =================
+def send_to_email(image_bytes, filename):
+    email_to = os.environ.get("EMAIL_TO")
+    email_from = os.environ.get("EMAIL_FROM")
+    app_password = os.environ.get("EMAIL_APP_PASSWORD")
 
-        # Зураг хавсаргах
-        attach = MIMEBase('application', 'octet-stream')
+    if not all([email_to, email_from, app_password]):
+        return "Имэйл тохиргоо (env) дутуу байна"
+
+    try:
+        message = MIMEMultipart()
+        message["From"] = email_from
+        message["To"] = email_to
+        message["Subject"] = f"Screenshot: {filename}"
+
+        attach = MIMEBase("application", "octet-stream")
         attach.set_payload(image_bytes)
         encoders.encode_base64(attach)
-        attach.add_header('Content-Disposition', f'attachment; filename= {filename}')
+        attach.add_header(
+            "Content-Disposition",
+            f"attachment; filename={filename}"
+        )
         message.attach(attach)
 
-        # SMTP сервер холбогдох
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()  # Аюулгүй холболт
-        server.login(email_from, app_password)  # Илгээгч имэйл ба app password
-
-        # Имэйл илгээх
-        text = message.as_string()
-        server.sendmail(email_from, email_to, text)
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(email_from, app_password)
+        server.sendmail(email_from, email_to, message.as_string())
         server.quit()
 
-        return f"Имэйл илгээгдлээ: {email_to} руу {filename} хавсаргасан."
+        return "Имэйл амжилттай илгээгдлээ"
     except Exception as e:
         return f"Имэйл илгээхэд алдаа: {str(e)}"
 
@@ -136,10 +137,11 @@ def generate():
 @app.route("/get_counter", methods=["GET"])
 def get_counter():
     if os.path.exists(COUNTER_FILE):
-        with open(COUNTER_FILE, 'r') as f:
+        with open(COUNTER_FILE, "r") as f:
             current_id = int(f.read().strip())
     else:
         current_id = 0
+
     return jsonify({"count": current_id})
 
 @app.route("/save_image", methods=["POST"])
@@ -153,21 +155,18 @@ def save_image():
         image_data = data.split(",")[1]
         image_bytes = base64.b64decode(image_data)
 
-        filename = get_next_filename()  # Дугаарлагдсан нэр авах
+        filename = get_next_filename()
+        email_status = send_to_email(image_bytes, filename)
 
-        # Таны имэйл хаяг (env var-аас авах, Render дээр тохируулах)
-        email_to = os.environ.get('EMAIL_TO', 'jargal130613@gmail.com')
-        email_from = os.environ.get('EMAIL_FROM', 'azjargala076@gmail.com')
-        app_password = os.environ.get('EMAIL_APP_PASSWORD', 'acys zqsv akqv hkxz')
-
-        # Gmail-ээр илгээх
-        email_status = send_to_email(image_bytes, filename, email_to, email_from, app_password)
-        if "алдаа" in email_status:
+        if "алдаа" in email_status or "дутуу" in email_status:
             return jsonify({"success": False, "error": email_status})
 
-        print(f"📸 Screenshot sent from {email_from} to {email_to}: {filename}")
-
-        return jsonify({"success": True, "filename": filename, "email_status": email_status})
+        print(f"📸 {filename} имэйлээр илгээгдлээ")
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "email_status": email_status
+        })
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
