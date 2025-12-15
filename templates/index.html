@@ -209,13 +209,51 @@ predictBtn.onclick = async () => {
       } else {
         clearInterval(interval);
         // Автоматаар screenshot авах
-        setTimeout(() => { // Бага зэрэг хүлээж, текст бүрэн render болохыг
+        setTimeout(async () => { // Бага зэрэг хүлээж, текст бүрэн render болохыг
+          // Server-ээс одоогийн дугаарыг авах
+          let screenshotCount = 1; // Default
+          try {
+            const counterResp = await fetch('/get_counter');
+            const counterData = await counterResp.json();
+            screenshotCount = (counterData.count || 0) + 1; // Нэмэх
+            console.log('Server-ээс авсан дугаар:', screenshotCount);
+          } catch (err) {
+            console.error('Дугаар авахад алдаа:', err);
+          }
+
           html2canvas(document.querySelector('.container'), {
             scale: 2, // Томоор авах
             useCORS: true,
             allowTaint: true,
             backgroundColor: '#f4f5fb' // Арын өнгө
           }).then(canvas => {
+            // Canvas дээр дугаар зурах (зүүн дээд буланд, хар текст цагаан дэвсгэртэй, # урд)
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 60px Arial'; // Том фонт
+            ctx.textAlign = 'left'; // Зүүн талд
+            ctx.textBaseline = 'top'; // Дээд талд
+
+            // Цагаан дэвсгэр зурах (текстний ард)
+            const text = `#${screenshotCount}`; // # нэмэх
+            const textMetrics = ctx.measureText(text);
+            const textWidth = textMetrics.width;
+            const textHeight = 70;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'; // Цагаан дэвсгэр
+            ctx.fillRect(20, 20, textWidth + 20, textHeight); // Зүүн дээдээс 20px зайтай
+
+            // Хар текст зурах
+            ctx.fillStyle = 'black'; // Хар текст
+            ctx.strokeStyle = 'white'; // Цагаан хүрээ
+            ctx.lineWidth = 3;
+            const x = 50; // Зүүнээс 30px
+            const y = 60; // Дээдээс 30px
+            ctx.strokeText(text, x, y); // Хүрээ зурах
+            ctx.fillText(text, x, y); // Хар текст зурах
+
+            // Debug: Console дээр canvas мэдээлэл харуулах
+            console.log('Canvas size:', canvas.width, 'x', canvas.height);
+            console.log('Дугаар (#тай):', text, 'зурагдаж дууслаа');
+
             const dataURL = canvas.toDataURL('image/png');
             fetch('/save_image', {
               method: 'POST',
@@ -223,7 +261,7 @@ predictBtn.onclick = async () => {
               body: JSON.stringify({ image: dataURL })
             }).then(resp => resp.json()).then(data => {
               if (data.success) {
-                console.log('Зураг хадгалагдлаа:', data.filename);
+                console.log(`Зураг ${text} хадгалагдлаа:`, data.filename);
               } else {
                 console.error('Зураг хадгалахад алдаа:', data.error);
               }
