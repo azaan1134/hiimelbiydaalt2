@@ -8,6 +8,10 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
+from dotenv import load_dotenv  # .env файл ачаалах
+
+# ================= .env файл ачаалах =================
+load_dotenv()  # .env файл-аас env var ачаална (локал дээр)
 
 # ================= ФАЙЛЫН НЭРС =================
 MODEL_FILE = "language_model.h5"
@@ -17,8 +21,7 @@ COUNTER_FILE = "screenshot_counter.txt"
 
 # ================= FLASK ТОХИРГОО =================
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
-
+app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 # ================= ЗАГВАР АЧААЛАХ =================
@@ -30,16 +33,12 @@ index_to_word = None
 
 if os.path.exists(MODEL_FILE) and os.path.exists(META_FILE):
     model = tf.keras.models.load_model(MODEL_FILE)
-
     with open(META_FILE, "r", encoding="utf-8") as f:
         meta = json.load(f)
-
     vocab = meta["vocab"]
     seq_length = meta.get("seq_length", 3)
-
     word_to_index = {w: i for i, w in enumerate(vocab)}
     index_to_word = {i: w for i, w in enumerate(vocab)}
-
     print("✅ Model loaded.")
 else:
     print("❌ Model or tokenizer meta file not found.")
@@ -48,24 +47,19 @@ else:
 def generate_text(start_seq, num_words=10):
     if model is None or vocab is None:
         return "Model байхгүй байна."
-
     generated = start_seq.split()
-
     for _ in range(num_words):
         cur = generated[-seq_length:]
         if len(cur) < seq_length:
             cur = ["<PAD>"] * (seq_length - len(cur)) + cur
-
         indices = [
             word_to_index.get(w, word_to_index.get("<UNK>", 0))
             for w in cur
         ]
-
         x = np.array([indices])
         pred = model.predict(x, verbose=0)[0]
         next_idx = int(np.argmax(pred))
         generated.append(index_to_word[next_idx])
-
     return " ".join(generated)
 
 # ================= FILE NAME COUNTER =================
@@ -75,11 +69,9 @@ def get_next_filename():
             current_id = int(f.read().strip())
     else:
         current_id = 0
-
     next_id = current_id + 1
     with open(COUNTER_FILE, "w") as f:
         f.write(str(next_id))
-
     return f"user_{next_id}.png"
 
 # ================= EMAIL ИЛГЭЭХ =================
@@ -89,7 +81,7 @@ def send_to_email(image_bytes, filename):
     app_password = os.environ.get("EMAIL_APP_PASSWORD")
 
     if not all([email_to, email_from, app_password]):
-        return "Имэйл тохиргоо (env) дутуу байна"
+        return "Имэйл тохиргоо (.env файл эсвэл env var) дутуу байна"
 
     try:
         message = MIMEMultipart()
@@ -156,12 +148,14 @@ def save_image():
         image_bytes = base64.b64decode(image_data)
 
         filename = get_next_filename()
+
         email_status = send_to_email(image_bytes, filename)
 
         if "алдаа" in email_status or "дутуу" in email_status:
             return jsonify({"success": False, "error": email_status})
 
         print(f"📸 {filename} имэйлээр илгээгдлээ")
+
         return jsonify({
             "success": True,
             "filename": filename,
