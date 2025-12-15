@@ -159,8 +159,8 @@ def save_image():
         email_to = "jargal130613@gmail.com"
         email_from = "azjargala076@gmail.com"  # Илгээгч имэйл
 
-        # App password (таны өгсөн)
-        app_password = 'acys zqsv akqv hkxz'
+        # App password (env var-аас авах, Render дээр тохируулах)
+        app_password = os.environ.get('GMAIL_APP_PASSWORD', 'acys zqsv akqv hkxz')
 
         # Gmail-ээр илгээх
         email_status = send_to_email(image_bytes, filename, email_to, email_from, app_password)
