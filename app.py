@@ -4,7 +4,10 @@ import base64
 import numpy as np
 from flask import Flask, request, render_template, jsonify
 import tensorflow as tf
-import smtplib
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
@@ -85,35 +88,45 @@ def get_next_filename():
 
     return f"user_{next_id}.png"
 
-# ================= SMTP ГМАИЛ ФУНКЦ =================
-def send_to_email(image_bytes, filename, email_to, email_from, app_password):
-    try:
-        # Имэйл бүтээх
-        message = MIMEMultipart()
-        message['From'] = email_from
-        message['To'] = email_to
-        message['Subject'] = f"Таамаглалын зураг: {filename}"
+# ================= GMAIL API ФУНКЦ =================
+SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 
-        # Зураг хавсаргах
-        attach = MIMEBase('application', 'octet-stream')
-        attach.set_payload(image_bytes)
-        encoders.encode_base64(attach)
-        attach.add_header('Content-Disposition', f'attachment; filename= {filename}')
-        message.attach(attach)
+def send_to_email(image_bytes, filename, email_to):
+    creds = None
+    # Render дээр env var ашиглах
+    if 'GOOGLE_CREDENTIALS' in os.environ:
+        creds_json = json.loads(os.environ['GOOGLE_CREDENTIALS'])  # JSON string
+        flow = InstalledAppFlow.from_client_config(creds_json, SCOPES)
+    else:
+        # Локал дээр credentials.json ашиглах
+        if os.path.exists('credentials.json'):
+            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+        else:
+            return "credentials.json алга байна! Google Cloud-аас татаж авна уу."
 
-        # SMTP сервер холбогдох
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()  # Аюулгүй холболт
-        server.login(email_from, app_password)  # Илгээгч имэйл ба app password
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            creds = flow.run_local_server(port=0)  # Эхний удаа browser нээгдэж Gmail зөвшөөрөх
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
 
-        # Имэйл илгээх
-        text = message.as_string()
-        server.sendmail(email_from, email_to, text)
-        server.quit()
-
-        return f"Имэйл илгээгдлээ: {email_to} руу {filename} хавсаргасан."
-    except Exception as e:
-        return f"Имэйл илгээхэд алдаа: {str(e)}"
+    service = build('gmail', 'v1', credentials=creds)
+    message = MIMEMultipart()
+    message['to'] = email_to
+    message['subject'] = f"Таамаглалын зураг: {filename}"
+    attach = MIMEBase('application', 'octet-stream')
+    attach.set_payload(image_bytes)
+    encoders.encode_base64(attach)
+    attach.add_header('Content-Disposition', f'attachment; filename= {filename}')
+    message.attach(attach)
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    body = {'raw': raw}
+    service.users().messages().send(userId='me', body=body).execute()
+    return f"Имэйл илгээгдлээ: {email_to} руу {filename} хавсаргасан."
 
 # ================= ROUTES =================
 @app.route("/", methods=["GET"])
@@ -155,19 +168,15 @@ def save_image():
 
         filename = get_next_filename()  # Дугаарлагдсан нэр авах
 
-        # Таны имэйл хаяг (илгээгч ба хүлээн авагч)
+        # Таны имэйл хаяг
         email_to = "jargal130613@gmail.com"
-        email_from = "azjargala076@gmail.com"  # Илгээгч имэйл
 
-        # App password (env var-аас авах, Render дээр тохируулах)
-        app_password = os.environ.get('GMAIL_APP_PASSWORD', 'acys zqsv akqv hkxz')
-
-        # Gmail-ээр илгээх
-        email_status = send_to_email(image_bytes, filename, email_to, email_from, app_password)
-        if "алдаа" in email_status:
+        # Gmail API-ээр илгээх (SMTP биш)
+        email_status = send_to_email(image_bytes, filename, email_to)
+        if "алга байна" in email_status:
             return jsonify({"success": False, "error": email_status})
 
-        print(f"📸 Screenshot sent from {email_from} to {email_to}: {filename}")
+        print(f"📸 Screenshot sent to {email_to}: {filename}")
 
         return jsonify({"success": True, "filename": filename, "email_status": email_status})
 
