@@ -1,0 +1,5 @@
+credentials.json
+token.json
+saved_images/
+__pycache__/
+*.pyc
