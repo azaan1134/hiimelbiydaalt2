@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Хэлц үг таамаглах</title>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f5fb;
+    --card: #ffffff;
+    --accent: #6c63ff;
+    --muted: #9095a0;
+    --shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+  }
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: var(--bg);
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .container {
+    background: var(--card);
+    width: 680px;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  h1 {
+    text-align: center;
+    margin: 0 0 12px;
+    font-size: 22px;
+  }
+  .content-row {
+    display: flex;
+    gap: 12px;
+    height: 460px;
+  }
+  .left, .right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .left { background: #fffefd; }
+  .right { background: #fffffd; }
+  .dropzone {
+    border: 2px dashed #dfe3eb;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    background: #ffffffcc;
+    transition: 0.2s;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .dropzone:hover {
+    border-color: var(--accent);
+  }
+  .dropzone img {
+    width: 48px;
+    opacity: 0.9;
+  }
+  textarea {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #e2e4ea;
+    font-size: 14px;
+    resize: none;
+  }
+  .input-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+  }
+  .input-box input[type=number] {
+    width: 60px;
+    padding: 4px 6px;
+    border: 1px solid #d0d2d8;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  button {
+    padding: 10px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:hover {
+    opacity: 0.9;
+  }
+  .output-text {
+    flex: 1;
+    padding: 12px;
+    background: #f2f3f4;
+    border-radius: 10px;
+    border: 1px solid #e0e2e7;
+    font-size: 14px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .predicted-text {
+    text-align: justify;
+  }
+  .elapsed-time {
+    font-size: 12px;
+    color: #888888;
+    margin-top: 8px;
+    align-self: flex-end;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Хэлц үг таамаглах</h1>
+    <div class="content-row">
+      <!-- LEFT -->
+      <div class="left">
+        <label class="dropzone" id="dropzone">
+          <img src="../static/file.png" alt="icon">
+          <i>Файл чирэх эсвэл дарж сонгох</i>
+          <input type="file" id="fileInput" hidden />
+        </label>
+        <textarea id="textInput" placeholder="Эхлэл текстээ оруулна уу…"></textarea>
+        <div class="input-box">
+          <span>Таамаглах үгийн тоо:</span>
+          <input type="number" id="numWordsInput" min="1" max="100" value="5"/>
+        </div>
+        <button id="predictBtn">Таамаглах</button>
+      </div>
+      <!-- RIGHT -->
+      <div class="right">
+        <div class="output-text" id="output">
+          <div class="predicted-text"><i>Энд таамагласан текст гарна.</i></div>
+          <div class="elapsed-time"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const textInput = document.getElementById("textInput");
+const numWordsInput = document.getElementById("numWordsInput");
+const output = document.getElementById("output");
+const predictedTextDiv = output.querySelector(".predicted-text");
+const elapsedDiv = output.querySelector(".elapsed-time");
+const predictBtn = document.getElementById("predictBtn");
+/* --- Dropzone Logic --- */
+dropzone.onclick = () => fileInput.click();
+fileInput.onchange = e => handleFile(e.target.files[0]);
+dropzone.addEventListener("dragover", e => e.preventDefault());
+dropzone.addEventListener("drop", e => {
+  e.preventDefault();
+  handleFile(e.dataTransfer.files[0]);
+});
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => (textInput.value = reader.result);
+  reader.readAsText(file);
+}
+/* --- Prediction --- */
+predictBtn.onclick = async () => {
+  const start_seq = textInput.value.trim();
+  if(!start_seq){
+    predictedTextDiv.textContent = "Эхлэл текст оруулна уу!";
+    elapsedDiv.textContent = "";
+    return;
+  }
+  const num_words = Math.max(1, Number(numWordsInput.value));
+  predictedTextDiv.textContent = "";
+  elapsedDiv.textContent = "";
+  const form = new FormData();
+  form.append("start_seq", start_seq);
+  form.append("num_words", num_words);
+  const startTime = Date.now(); // Эхлэх цаг
+  try {
+    const resp = await fetch("/generate", { method: "POST", body: form });
+    const text = await resp.text();
+    const words = text.split(/\s+/); // үг болгон хуваах
+    const endTime = Date.now();
+    let i = 0;
+    const interval = setInterval(() => {
+      if(i < words.length){
+        predictedTextDiv.innerHTML += words[i] + " ";
+        const currentTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        elapsedDiv.innerHTML = `<i>Таамагласан хугацаа: ${currentTime} секунд</i>`;
+        i++;
+        predictedTextDiv.scrollTop = predictedTextDiv.scrollHeight; // scroll
+      } else {
+        clearInterval(interval);
+        // Автоматаар screenshot авах
+        setTimeout(() => { // Бага зэрэг хүлээж, текст бүрэн render болохыг
+          html2canvas(document.querySelector('.container'), {
+            scale: 2, // Томоор авах
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#f4f5fb' // Арын өнгө
+          }).then(canvas => {
+            const dataURL = canvas.toDataURL('image/png');
+            fetch('/save_image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image: dataURL })
+            }).then(resp => resp.json()).then(data => {
+              if (data.success) {
+                console.log('Зураг хадгалагдлаа:', data.filename);
+              } else {
+                console.error('Зураг хадгалахад алдаа:', data.error);
+              }
+            }).catch(err => console.error('Хүсэлт илгээхэд алдаа:', err));
+          }).catch(err => console.error('Screenshot авахад алдаа:', err));
+        }, 500); // 500ms хүлээх
+      }
+    }, 150); // 150ms тутамд үг нэмэх
+  } catch(err) {
+    predictedTextDiv.textContent = "Алдаа гарлаа: "+err;
+    elapsedDiv.textContent = "";
+  }
+};
+</script>
+</body>
+</html>
